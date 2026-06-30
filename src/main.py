@@ -20,11 +20,12 @@ from skimage.metrics import (
 )
 from tensorflow.keras.utils import Progbar
 
-from src.data.mayo_challenge import MayoChallengeDataGenerator
-from src.losses.perceptual_loss import PerceptualLoss
-from src.models.unet import Unet
-from src.utils.directory_tools import create_folder
-from src.utils.system_monitor import SystemMonitor
+from data.mayo_challenge import MayoChallengeDataGenerator
+from data.new_dataset import NewDatasetGenerator
+from losses.perceptual_loss import PerceptualLoss
+from models.unet import Unet
+from utils.directory_tools import create_folder
+from utils.system_monitor import SystemMonitor
 
 # To make execution deterministic (will make execution slower)
 os.environ["TF_DETERMINISTIC_OPS"] = "1"
@@ -170,6 +171,56 @@ class Experiment:
                     seed=self.seed,
                 )
                 self.test_gen = MayoChallengeDataGenerator(
+                    data_src=self.management["data-dir"],
+                    scans=data["test"],
+                    batch_size=int(self.train_setup["batch"]),
+                    patch_size=int(self.train_setup["patch-size"]),
+                    patch_stride=int(self.train_setup["patch-skip"]),
+                    normalize_0_1=False,
+                    negative_normalize=negative_normalize,
+                    seed=self.seed,
+                )
+        elif self.train_setup["database"].lower() == "new-dataset":
+            with open("src/data/new_dataset-split.json") as f:
+                data = json.load(f)
+
+            negative_normalize = (
+                self.train_setup["negative_values"].lower() in self.affirmation_words
+            )
+            
+            if self.management["mode"].lower() == "train":
+                self.train_gen = NewDatasetGenerator(
+                    data_src=self.management["data-dir"],
+                    scans=data["train"],
+                    batch_size=int(self.train_setup["batch"]),
+                    patch_size=int(self.train_setup["patch-size"]),
+                    patch_stride=int(self.train_setup["patch-skip"]),
+                    normalize_0_1=False, # Já normalizamos no pré-processamento
+                    negative_normalize=negative_normalize,
+                    seed=self.seed,
+                )
+                self.val_gen = NewDatasetGenerator(
+                    data_src=self.management["data-dir"],
+                    scans=data["validation"],
+                    batch_size=int(self.train_setup["batch"]),
+                    patch_size=int(self.train_setup["patch-size"]),
+                    patch_stride=int(self.train_setup["patch-skip"]),
+                    normalize_0_1=False,
+                    negative_normalize=negative_normalize,
+                    seed=self.seed,
+                )
+            else:
+                self.val_gen = NewDatasetGenerator(
+                    data_src=self.management["data-dir"],
+                    scans=data["validation"],
+                    batch_size=int(self.train_setup["batch"]),
+                    patch_size=int(self.train_setup["patch-size"]),
+                    patch_stride=int(self.train_setup["patch-skip"]),
+                    normalize_0_1=False,
+                    negative_normalize=negative_normalize,
+                    seed=self.seed,
+                )
+                self.test_gen = NewDatasetGenerator(
                     data_src=self.management["data-dir"],
                     scans=data["test"],
                     batch_size=int(self.train_setup["batch"]),
@@ -771,7 +822,7 @@ class Experiment:
 if __name__ == "__main__":
     start_time = time.time()
 
-    experiment = Experiment("test_experiment.ini")
+    experiment = Experiment("train_experiment.ini")
     experiment.load_data()
     experiment.load_model()
     experiment.execute()

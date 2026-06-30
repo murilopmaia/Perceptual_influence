@@ -24,8 +24,8 @@ def save_dataset(args):
         print(f"Create path : {args.save_path}")
 
     patients_list = sorted([d for d in os.listdir(args.data_path) if "zip" not in d])
-    for p_ind, patient in enumerate(patients_list):
 
+    for p_ind, patient in enumerate(patients_list):
         if args.kernel == "D45":
             patient_input_path = os.path.join(
                 args.data_path, patient, f"quarter_{args.mm}mm_sharp"
@@ -63,7 +63,7 @@ def save_dataset(args):
 
 def load_scan(path):
     # referred from https://www.kaggle.com/gzuidhof/full-preprocessing-tutorial
-    slices = [pydicom.read_file(os.path.join(path, s)) for s in os.listdir(path)]
+    slices = [pydicom.dcmread(os.path.join(path, s)) for s in os.listdir(path)]
     slices.sort(key=lambda x: float(x.ImagePositionPatient[2]))
 
     try:
@@ -130,12 +130,12 @@ def show_progress(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    src_folder = "/home/gabriel/Research/dataset/mayo-challenge-raw/"
+    src_folder = "/workspace/dataset/images"
 
-    parser.add_argument("--mm", type=int, default=1)
+    parser.add_argument("--mm", type=int, default=3)
     parser.add_argument("--kernel", type=str, default="B30")
     parser.add_argument(
-        "--data_path", type=str, default=f"{src_folder}Training_Image_Data/"
+        "--data_path", type=str, default=f"{src_folder}"
     )
     parser.add_argument("--save_path", type=str, default=f"{src_folder}/npy_img/")
 

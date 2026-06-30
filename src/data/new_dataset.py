@@ -3,9 +3,8 @@ import numpy as np
 import os
 import random
 
-
-class MayoChallengeDataGenerator(tf.keras.utils.Sequence):
-    """Mayo Challenge sample values are already between 0 and 1. But majority hasn't 0 ou 1 value."""
+class NewDatasetGenerator(tf.keras.utils.Sequence):
+    """Gerador de dados customizado para matrizes 256x256 pré-fatiadas."""
 
     def __init__(
         self,
@@ -18,25 +17,19 @@ class MayoChallengeDataGenerator(tf.keras.utils.Sequence):
         negative_normalize,
         seed,
     ):
-        self.image_size = 512
+        self.image_size = 256  
         self.batch_size = batch_size
         self.total_samples = []
-        self.scans = scans
-        self.configs = ["3mm D45", "3mm B30", "1mm D45", "1mm B30"]
+        self.scans = scans  
 
         tf.random.set_seed(seed)
         np.random.seed(seed)
         random.seed(seed)
 
-        for folder in self.scans:
-            for config in self.configs:
-                files = os.listdir(os.path.join(data_src, "npy_img", config))
-                for f in [
-                    x for x in files if x.startswith(folder) and x.endswith("input.npy")
-                ]:
-                    self.total_samples.append(
-                        (os.path.join(data_src, "npy_img", config), f)
-                    )
+        files = os.listdir(data_src)
+        for patient in self.scans:
+            for f in [x for x in files if x.startswith(patient) and x.endswith("input.npy")]:
+                self.total_samples.append((data_src, f))
 
         random.shuffle(self.total_samples)
 
@@ -63,24 +56,18 @@ class MayoChallengeDataGenerator(tf.keras.utils.Sequence):
         batch = self.all_patches_location[
             index * self.batch_size : (index + 1) * self.batch_size
         ]
-
         return self.__get_data(batch)
 
-    def get_slices_available(self, target_scan, config):
+    def get_slices_available(self, target_scan):
         return sorted(
-            [
-                file
-                for (folder, file) in self.total_samples
-                if (target_scan in file and config in folder)
-            ]
+            [file for (folder, file) in self.total_samples if target_scan in file]
         )
 
-    def get_specific_data(self, scan, slice_, config, patch_size=None):
+    def get_specific_data(self, scan, slice_, patch_size=None):
         idx = [
             index
             for index, (folder, file) in enumerate(self.total_samples)
             if (file.startswith(scan) and int(file.split("_")[1]) == slice_)
-            and folder.endswith(config)
         ]
 
         if patch_size is None:

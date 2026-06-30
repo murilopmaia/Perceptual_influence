@@ -1,0 +1,11 @@
+{
+  "train": [
+    "paciente0000"
+  ],
+  "validation": [
+    "paciente0001"
+  ],
+  "test": [
+    "paciente0001"
+  ]
+}
