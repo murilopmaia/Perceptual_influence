@@ -181,7 +181,7 @@ class Experiment:
                     seed=self.seed,
                 )
         elif self.train_setup["database"].lower() == "new-dataset":
-            with open("src/data/new_dataset-split.json") as f:
+            with open("src/data/my_dataset_split.json") as f:
                 data = json.load(f)
 
             negative_normalize = (
@@ -250,6 +250,7 @@ class Experiment:
                 perceptual_space_loss=self.loss_setup["perceptual-space-loss"],
                 image_space_loss=self.loss_setup["image-space-loss"],
                 perceptual_weight=float(self.loss_setup["perceptual-weight"]),
+                target_perceptual_influence=float(self.loss_setup.get("target-perceptual-influence", 0.95)),
                 content_layer=self.loss_setup["perceptual-content-layer"],
                 perceptual_model=self.loss_setup["perceptual-model"],
                 weights_path=self.loss_setup["weights-path"],
@@ -348,6 +349,8 @@ class Experiment:
             train_history = {
                 "train-loss": [],
                 "train-acc": [],
+                "lambda-used": [],         
+                "lambda-calculated": [],
                 "val-loss": [],
                 "val-acc": [],
                 "ram-mem-used": [],
@@ -491,37 +494,50 @@ class Experiment:
 
             end = time.time()
             epoch_elapsed_time = (end - start) / 3600
+
+            
+            lambda_utilizado = float(self.loss.perceptual_weight.numpy())
+            novo_lambda = lambda_utilizado 
+            
+            
+            if self.loss_setup.get("adaptive-lambda", "no").lower() in self.affirmation_words:
+                alvo = float(self.loss_setup.get("target-perceptual-influence", 0.95))
+                self.loss.target_influence = alvo
+                
+                mse_atual = total_train_image_loss / len(self.train_gen)
+                pl_atual = total_train_perceptual_loss / len(self.train_gen)
+                
+                novo_lambda = self.loss.calculate_adaptive_lambda(mse_atual, pl_atual)
+                self.loss.update_weight(novo_lambda)
+                print(f"Época ajustada para alvo {alvo*100}%: novo lambda = {novo_lambda:.2e}")
+
+            
             gpu_info = self.sys_monitor.get_gpu_info()
             train_history["GPU"].append(gpu_info["name"])
             train_history["gpu-mem-free"].append(gpu_info["mem_free"])
             train_history["gpu-mem-used"].append(gpu_info["mem_used"])
             train_history["ram-mem-used"].append(self.sys_monitor.get_mem_usage())
-            train_history["train-loss"].append(
-                float(total_train_loss / len(self.train_gen))
-            )
+            train_history["train-loss"].append(float(total_train_loss / len(self.train_gen)))
             train_history["train-acc"].append(float(self.train_acc.result()))
             train_history["val-loss"].append(float(total_val_loss / len(self.val_gen)))
             train_history["val-acc"].append(float(self.val_acc.result()))
             train_history["elapsed-time-per-epoch"].append(epoch_elapsed_time)
+            
+            
+            train_history["lambda-used"].append(lambda_utilizado)
+            train_history["lambda-calculated"].append(float(novo_lambda))
 
             if self.train_setup["loss"].lower() == "perceptual":
-                train_history["train-image-loss"].append(
-                    float(total_train_image_loss / len(self.train_gen))
-                )
-                train_history["train-perceptual-loss"].append(
-                    float(total_train_perceptual_loss / len(self.train_gen))
-                )
-                train_history["val-image-loss"].append(
-                    float(total_val_image_loss / len(self.val_gen))
-                )
-                train_history["val-perceptual-loss"].append(
-                    float(total_val_perceptual_loss / len(self.val_gen))
-                )
+                train_history["train-image-loss"].append(float(total_train_image_loss / len(self.train_gen)))
+                train_history["train-perceptual-loss"].append(float(total_train_perceptual_loss / len(self.train_gen)))
+                train_history["val-image-loss"].append(float(total_val_image_loss / len(self.val_gen)))
+                train_history["val-perceptual-loss"].append(float(total_val_perceptual_loss / len(self.val_gen)))
 
             training_time = training_time + epoch_elapsed_time
             train_history["total-training-time"] = training_time
             train_history["trainable-weights"] = self.__get_trainable_weights()
 
+        
             create_folder("./outputs/logs/")
             with open(f"./outputs/logs/train-hist.{self.hash}", "w") as outfile:
                 json.dump(train_history, outfile, indent=2)

@@ -12,6 +12,7 @@ class PerceptualLoss(LossFunctionWrapper):
         content_layer,
         image_space_loss,
         perceptual_weight,
+        target_perceptual_influence,
         perceptual_model,
         weights_path,
         reduction=losses_utils.ReductionV2.AUTO,
@@ -47,6 +48,13 @@ class PerceptualLoss(LossFunctionWrapper):
 
         self.image_loss_value = None
         self.perceptual_loss_value = None
+        self.perceptual_weight = tf.Variable(
+            float(perceptual_weight), 
+            trainable=False, 
+            dtype=tf.float32, 
+            name="perceptual_weight"
+        )
+        self.target_influence = target_perceptual_influence
 
         super().__init__(
             self.loss_function,
@@ -55,8 +63,16 @@ class PerceptualLoss(LossFunctionWrapper):
             model=model,
             perceptual_space_loss=perceptual_space_loss,
             image_space_loss=image_space_loss,
-            perceptual_weight=perceptual_weight,
+            perceptual_weight=self.perceptual_weight,
         )
+
+    def update_weight(self, new_weight):
+        self.perceptual_weight.assign(new_weight)
+
+    def calculate_adaptive_lambda(self, mse_loss, pl_loss):
+        psi = self.target_influence
+        if pl_loss == 0: return 0
+        return (psi * mse_loss) / ((1 - psi) * pl_loss)
 
     def loss_function(
         self,
