@@ -181,7 +181,7 @@ class Experiment:
                     seed=self.seed,
                 )
         elif self.train_setup["database"].lower() == "new-dataset":
-            with open("src/data/my_dataset_split.json") as f:
+            with open("./src/data/my_dataset_split.json") as f:
                 data = json.load(f)
 
             negative_normalize = (
@@ -195,7 +195,7 @@ class Experiment:
                     batch_size=int(self.train_setup["batch"]),
                     patch_size=int(self.train_setup["patch-size"]),
                     patch_stride=int(self.train_setup["patch-skip"]),
-                    normalize_0_1=False, # Já normalizamos no pré-processamento
+                    normalize_0_1=False, 
                     negative_normalize=negative_normalize,
                     seed=self.seed,
                 )
@@ -239,9 +239,7 @@ class Experiment:
         elif self.train_setup["loss"].lower() == "mae":
             self.loss = tf.keras.losses.MeanAbsoluteError()
         elif self.train_setup["loss"].lower() == "perceptual":
-            print(
-                f"Using Perceptual Weight: {float(self.loss_setup['perceptual-weight'])}"
-            )
+           
             print(f"Using Content Layer: {self.loss_setup['perceptual-content-layer']}")
             print(f"Perceptual model: {self.loss_setup['perceptual-model']}")
             print(f"Weights path: {self.loss_setup['weights-path']}")
@@ -701,6 +699,48 @@ class Experiment:
                 names_save_files.append(f"{str(self.hash)}_gt_{scan}_{slice_}.png")
                 names_save_files.append(f"{str(self.hash)}_pred_{scan}_{slice_}.png")
 
+            elif self.train_setup["database"].lower() == "new-dataset":
+                for k in range(len(self.test_gen.scans)):
+                    if k % 10 == 0:
+                        print("\n")
+                    print(f"{self.test_gen.scans[k]}       ", end="")
+                print("\n")
+
+                scan = input("Which scan would you like to inspect? ")
+                print(f"The following slices are available for scan {scan}:")
+                
+                
+                list_slices = self.test_gen.get_slices_available(scan)
+                
+                
+                try:
+                    list_slices = list(map(lambda x: int(x.split("_")[1]), list_slices))
+                except (IndexError, ValueError):
+                    pass 
+
+                for k, s_id in enumerate(sorted(list_slices)):
+                    print(f"{s_id}\t", end="\n" if k % 7 == 0 else "")
+
+                slice_ = input("\nWhich the slice number you would like to inspect? ")
+                
+                
+                x, y = self.test_gen.get_specific_data(
+                    scan,
+                    int(slice_),
+                    patch_size=int(self.test_setup["patch-size"]),
+                )
+                
+                epo = (
+                    int(self.test_management["load-specific-epoch"])
+                    if self.test_management["load-specific-epoch"] != "none"
+                    else -1
+                )
+                id_img = f"{scan}_{slice_}_epo{epo}"
+
+                names_save_files.append(f"{str(self.hash)}_input_{scan}_{slice_}.png")
+                names_save_files.append(f"{str(self.hash)}_gt_{scan}_{slice_}.png")
+                names_save_files.append(f"{str(self.hash)}_pred_{scan}_{slice_}.png")
+
             pred = self.model(x, training=False).numpy()
             x_show, y_show, pred_show = self.__post_process_images_for_evaluation(
                 x, y, pred
@@ -744,6 +784,13 @@ class Experiment:
                 return self.test_gen
             else:
                 raise Exception("Partition for computing metrics is not defined")
+        elif self.train_setup["database"].lower() == "new-dataset":
+            if self.test_setup["compute-metrics-all-set"].lower() == "validation":
+                return self.val_gen
+            elif self.test_setup["compute-metrics-all-set"].lower() == "test":
+                return self.test_gen
+            else:
+                raise Exception("Partition for computing metrics is not defined")
         else:
             raise Exception("Database not available for evaluation")
 
@@ -759,36 +806,49 @@ class Experiment:
                 "image,SSIM input,SSIM output,PSNR input,PSNR output,NRMSE input,NRMSE output\n"
             )
             for i, scan in enumerate(data_gen.scans):
-                print(
-                    f"\nCOMPUTING METRICS: scan {i + 1}/{len(data_gen.scans)}",
-                    end="",
-                )
-                for count_c, c in enumerate(data_gen.configs):
-                    print(f"\nConfig: {count_c + 1}/{len(data_gen.configs)}")
-                    pb = Progbar(len(data_gen.get_slices_available(scan, c)))
-                    for j, slice_name in enumerate(
-                        data_gen.get_slices_available(scan, c)
-                    ):
-                        x, y = data_gen.get_specific_data(
-                            scan,
-                            int(slice_name.split("_")[1]),
-                            c,
-                            patch_size=int(self.test_setup["patch-size"]),
-                        )
-                        pred = self.model(x, training=False).numpy()
-                        x, y, pred = self.__post_process_images_for_evaluation(
-                            x, y, pred
-                        )
+                print(f"\nCOMPUTING METRICS: scan {i + 1}/{len(data_gen.scans)}", end="")
+                
+                
+                is_mayo = self.train_setup["database"].lower() == "mayo-challenge"
+                configs_iterator = data_gen.configs if is_mayo else [None]
 
-                        line = f"{scan} {c} {slice_name},"
-                        line += f"{structural_similarity(y, x, channel_axis=-1):.4f},"
-                        line += (
-                            f"{structural_similarity(y, pred, channel_axis=-1):.4f},"
-                        )
-                        line += f"{peak_signal_noise_ratio(y, x):.2f},"
-                        line += f"{peak_signal_noise_ratio(y, pred):.2f},"
-                        line += f"{normalized_root_mse(y, x):.4f},"
-                        line += f"{normalized_root_mse(y, pred):.4f}\n"
+                for count_c, c in enumerate(configs_iterator):
+                    if is_mayo:
+                        print(f"\nConfig: {count_c + 1}/{len(data_gen.configs)}")
+                        slices_available = data_gen.get_slices_available(scan, c)
+                    else:
+                        print("\nConfig: Padrão (New-Dataset)")
+                        slices_available = data_gen.get_slices_available(scan)
+
+                    
+                    pb = Progbar(len(slices_available))
+                    
+                    for j, slice_name in enumerate(slices_available):
+                        
+                        if is_mayo:
+                            slice_num = int(slice_name.split("_")[1])
+                            x, y = data_gen.get_specific_data(
+                                scan, slice_num, c, patch_size=int(self.test_setup["patch-size"])
+                            )
+                        else:
+                            
+                            slice_num = int(slice_name.split("_")[1])
+                            x, y = data_gen.get_specific_data(
+                                scan, slice_num, patch_size=int(self.test_setup["patch-size"])
+                            )
+
+                        pred = self.model(x, training=False).numpy()
+                        x_post, y_post, pred_post = self.__post_process_images_for_evaluation(x, y, pred)
+
+                        
+                        config_name = c if is_mayo else "default"
+                        line = f"{scan} {config_name} {slice_name},"
+                        line += f"{structural_similarity(y_post, x_post, channel_axis=-1):.4f},"
+                        line += f"{structural_similarity(y_post, pred_post, channel_axis=-1):.4f},"
+                        line += f"{peak_signal_noise_ratio(y_post, x_post):.2f},"
+                        line += f"{peak_signal_noise_ratio(y_post, pred_post):.2f},"
+                        line += f"{normalized_root_mse(y_post, x_post):.4f},"
+                        line += f"{normalized_root_mse(y_post, pred_post):.4f}\n"
                         csv_file.write(line)
 
                         if j != 0 and j % 5 == 0:
@@ -798,11 +858,16 @@ class Experiment:
 
             print(f"File: {name_csv_file}\nKey\t\t[MEAN   (STD)]")
             df = pd.read_csv(name_csv_file, sep=",")
-            for k in df.keys()[1:]:
-                m = f"{np.mean(df[k].values):.4f}".replace(".", ",")
-                s = f"{np.std(df[k].values):.4f}".replace(".", ",")
+            
+            if len(df) > 0:
+                for k in df.keys()[1:]:
+                    m = f"{np.mean(df[k].values):.4f}".replace(".", ",")
+                    s = f"{np.std(df[k].values):.4f}".replace(".", ",")
 
-                print(f"{k}:\t{m} ({s})")
+                    print(f"{k}:\t{m} ({s})")
+            else:
+                print("\nAVISO: O arquivo CSV está vazio. Nenhuma métrica foi calculada.")
+                print("O conjunto selecionado não possuía imagens para serem processadas.\n")
 
     def __test(self):
         with open(f"./outputs/logs/train-hist.{self.hash}") as json_file:
@@ -838,7 +903,7 @@ class Experiment:
 if __name__ == "__main__":
     start_time = time.time()
 
-    experiment = Experiment("train_experiment.ini")
+    experiment = Experiment("test_experiment.ini")
     experiment.load_data()
     experiment.load_model()
     experiment.execute()

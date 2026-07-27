@@ -3,9 +3,10 @@
     "paciente0000"
   ],
   "validation": [
-    "paciente0001"
+    "paciente0000"
   ],
   "test": [
+    "paciente0000",
     "paciente0001"
   ]
 }
