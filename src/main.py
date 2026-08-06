@@ -332,6 +332,12 @@ class Experiment:
             with open(f"./outputs/logs/train-hist.{self.hash}") as json_file:
                 train_history = json.load(json_file)
 
+            if self.train_setup["loss"].lower() == "perceptual" and self.loss_setup.get("adaptive-lambda", "no").lower() in self.affirmation_words:
+                if "lambda-calculated" in train_history and len(train_history["lambda-calculated"]) > 0:
+                    ultimo_lambda = train_history["lambda-calculated"][-1]
+                    self.loss.update_weight(ultimo_lambda)
+                    print(f"RETOMANDO COM LAMBDA ADAPTÁVEL: {ultimo_lambda:.2e}")
+
             if (
                 self.train_setup["overwrite-weights-file"].lower()
                 in self.affirmation_words
