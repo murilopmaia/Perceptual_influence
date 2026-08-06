@@ -909,7 +909,7 @@ class Experiment:
 if __name__ == "__main__":
     start_time = time.time()
 
-    experiment = Experiment("test_experiment.ini")
+    experiment = Experiment("train_experiment.ini")
     experiment.load_data()
     experiment.load_model()
     experiment.execute()
